@@ -35,8 +35,23 @@ pi install @cdexs/pi-httpproxy
 
 ## Configure
 
+### Zero config
+
+If `~/.pi/proxy-domains.json` does not define a `domains` array, the extension
+uses a **built-in default whitelist** covering commonly-proxied services
+(Google, GitHub, Telegram, Brave Search, Hugging Face, OpenAI, Anthropic/
+Claude, npm registry, and more) — same list as
+[`proxy-domains.example.json`](./proxy-domains.example.json) below. Setting
+only `PROXY_URL` is enough:
+
+```bash
+PROXY_URL=http://127.0.0.1:7890 pi
+```
+
+### Full config
+
 Create `~/.pi/proxy-domains.json` (you can start from
-[`proxy-domains.example.json`](./proxy-domains.example.json) in the package):
+[`proxy-domains.example.json`](./proxy-domains.example.json)):
 
 ```jsonc
 {
@@ -74,6 +89,10 @@ silently ignored, so you can organize the list freely.
 | `PI_PROXY_DEBUG` | Set to `1` to log every routing decision to the console       |
 
 Fields locked by env vars are also excluded from hot reload.
+
+Note: to explicitly start with an empty whitelist (all direct), set a config
+file containing `"domains": []` — the built-in defaults only apply when the
+`domains` key is missing entirely.
 
 ## Hot reload
 

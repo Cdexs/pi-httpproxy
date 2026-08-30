@@ -1,5 +1,5 @@
 {
-	"$comment": "pi-httpproxy config. Copy to ~/.pi/proxy-domains.json and edit. Fields: proxy = HTTP proxy URL for whitelisted domains; domains = whitelist rules (exact, .base, or *.base; plain-text group labels are ignored); tapTelegramEnv = set PI_TELEGRAM_NETWORK_FAMILY=auto for pi-telegram (default true). PROXY_URL / PROXY_DOMAINS env vars override the file.",
+	"$comment": "pi-httpproxy config. Copy to ~/.pi/proxy-domains.json and edit. Fields: proxy = HTTP proxy URL for whitelisted domains; domains = whitelist rules (exact, .base, or *.base; plain-text group labels are ignored) — when omitted, the built-in default whitelist (same as this example) is used; tapTelegramEnv = set PI_TELEGRAM_NETWORK_FAMILY=auto for pi-telegram (default true). PROXY_URL / PROXY_DOMAINS env vars override the file.",
 	"proxy": "http://127.0.0.1:7890",
 	"tapTelegramEnv": true,
 	"domains": [
@@ -12,25 +12,62 @@
 		"*.googleapis.com",
 		"gstatic.com",
 		"*.gstatic.com",
+		"googleusercontent.com",
+		"*.googleusercontent.com",
+		"recaptcha.net",
+		"*.recaptcha.net",
 
 		"GitHub",
 		"github.com",
 		"*.github.com",
 		"githubusercontent.com",
 		"*.githubusercontent.com",
+		"githubassets.com",
+		"*.githubassets.com",
+		"ghcr.io",
+		"*.ghcr.io",
+
+		"Telegram",
+		"telegram.org",
+		"*.telegram.org",
+		"t.me",
+		"*.t.me",
+		"telegram.me",
+		"*.telegram.me",
+		"cdn-telegram.org",
+		"*.cdn-telegram.org",
+		"telesco.pe",
+		"*.telesco.pe",
+
+		"Brave Search",
+		"brave.com",
+		"*.brave.com",
+		"bravesoftware.com",
+		"*.bravesoftware.com",
+
+		"Hugging Face",
+		"huggingface.co",
+		"*.huggingface.co",
+		"hf.co",
+		"*.hf.co",
 
 		"AI services",
 		"openai.com",
 		"*.openai.com",
+		"oaiusercontent.com",
+		"*.oaiusercontent.com",
 		"anthropic.com",
 		"*.anthropic.com",
-		"huggingface.co",
-		"*.huggingface.co",
+		"claude.ai",
+		"*.claude.ai",
 
 		"Other",
 		"npmjs.com",
 		"*.npmjs.com",
-		"telegram.org",
-		"*.telegram.org"
+		"gravatar.com",
+		"*.gravatar.com",
+		"imgur.com",
+		"*.imgur.com",
+		"media.githubusercontent.com"
 	]
 }

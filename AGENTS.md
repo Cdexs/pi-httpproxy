@@ -47,6 +47,9 @@ pi-httpproxy/
 - 配置文件路径保持 `~/.pi/proxy-domains.json`（不重命名）
 - 热重载命令更名为 `/httpproxy-reload`
 - 包名带 scope：`@cdexs/pi-httpproxy`（npm 上用小写 scope）
+- 预置内置默认白名单（作者日常清单：Google/GitHub/Telegram/Brave/HF/OpenAI/
+  Anthropic/npm 等 40+ 条）：配置文件未定义 domains 时启用，开箱只设 PROXY_URL
+  即可用；配置显式写 `"domains": []` 表示刻意清空、不回退默认值
 
 ## 本地开发与验证
 

@@ -15,6 +15,9 @@
  *
  * Whitelist hit → proxied via `proxy` URL; miss → direct connection.
  * Config: ~/.pi/proxy-domains.json; PROXY_URL / PROXY_DOMAINS env vars override.
+ * If the config file does not define a "domains" array, a built-in default
+ * whitelist (common blocked-region services) is used, so the extension works
+ * out of the box: set PROXY_URL and go.
  * Hot reload: edit ~/.pi/proxy-domains.json, then run /httpproxy-reload in the
  * pi session (rebuilds the whitelist and ProxyAgent, no restart needed).
  * Proxy/domains locked by env vars are not touched by reload.
@@ -57,6 +60,78 @@ interface ExtensionAPI {
 
 const AGENT_DIR =
 	process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi");
+
+/**
+ * Built-in fallback whitelist, applied when the config file does not define a
+ * "domains" array (the very first run). Group labels are listed below purely
+ * for readability — they are filtered out by domainLike().
+ */
+const DEFAULT_DOMAINS: string[] = [
+	"Google",
+	"google.com",
+	"*.google.com",
+	"googleapis.com",
+	"*.googleapis.com",
+	"gstatic.com",
+	"*.gstatic.com",
+	"googleusercontent.com",
+	"*.googleusercontent.com",
+	"recaptcha.net",
+	"*.recaptcha.net",
+
+	"GitHub",
+	"github.com",
+	"*.github.com",
+	"githubusercontent.com",
+	"*.githubusercontent.com",
+	"githubassets.com",
+	"*.githubassets.com",
+	"ghcr.io",
+	"*.ghcr.io",
+
+	"Telegram",
+	"telegram.org",
+	"*.telegram.org",
+	"t.me",
+	"*.t.me",
+	"telegram.me",
+	"*.telegram.me",
+	"cdn-telegram.org",
+	"*.cdn-telegram.org",
+	"telesco.pe",
+	"*.telesco.pe",
+
+	"Brave Search",
+	"brave.com",
+	"*.brave.com",
+	"bravesoftware.com",
+	"*.bravesoftware.com",
+
+	"Hugging Face",
+	"huggingface.co",
+	"*.huggingface.co",
+	"hf.co",
+	"*.hf.co",
+
+	"AI services",
+	"openai.com",
+	"*.openai.com",
+	"oaiusercontent.com",
+	"*.oaiusercontent.com",
+	"anthropic.com",
+	"*.anthropic.com",
+	"claude.ai",
+	"*.claude.ai",
+
+	"Other",
+	"npmjs.com",
+	"*.npmjs.com",
+	"gravatar.com",
+	"*.gravatar.com",
+	"imgur.com",
+	"*.imgur.com",
+	"media.githubusercontent.com",
+].filter(domainLike);
 
 const CONFIG_PATH = join(AGENT_DIR, "proxy-domains.json");
 
@@ -101,6 +176,7 @@ function loadConfig(): {
 	proxy: string;
 	domains: string[];
 	tapTelegramEnv: boolean;
+	usingDefaults: boolean;
 } {
 	const envProxy = process.env.PROXY_URL?.trim();
 	const envDomains = process.env.PROXY_DOMAINS
@@ -110,6 +186,8 @@ function loadConfig(): {
 
 	let cfgProxy = envProxy || "";
 	let cfgDomains: string[] = [];
+	// Fallback marker: true when neither env nor config specifies a whitelist
+	let useDefaultDomains = !envDomains;
 	let cfgTapTelegramEnv = true;
 
 	if (existsSync(CONFIG_PATH)) {
@@ -120,6 +198,8 @@ function loadConfig(): {
 			if (!cfgProxy && typeof raw.proxy === "string") cfgProxy = raw.proxy.trim();
 			if (!envDomains && Array.isArray(raw.domains)) {
 				cfgDomains = raw.domains.filter(domainLike);
+				// config file explicitly defines a whitelist → don't fall back to defaults
+				useDefaultDomains = false;
 			}
 			if (typeof raw.tapTelegramEnv === "boolean") {
 				cfgTapTelegramEnv = raw.tapTelegramEnv;
@@ -130,8 +210,17 @@ function loadConfig(): {
 			);
 		}
 	}
-	if (envDomains) cfgDomains = envDomains;
-	return { proxy: cfgProxy, domains: cfgDomains, tapTelegramEnv: cfgTapTelegramEnv };
+	if (envDomains) {
+		cfgDomains = envDomains;
+	} else if (useDefaultDomains) {
+		cfgDomains = DEFAULT_DOMAINS.slice();
+	}
+	return {
+		proxy: cfgProxy,
+		domains: cfgDomains,
+		tapTelegramEnv: cfgTapTelegramEnv,
+		usingDefaults: useDefaultDomains && cfgDomains.length > 0,
+	};
 }
 
 /** Matching rules — exact | *.{base} | .{base} (case-insensitive) */
@@ -177,7 +266,7 @@ export function reloadProxyConfig(): ReloadResult {
 			? domains.slice()
 			: Array.isArray(next.domains)
 				? (next.domains as unknown[]).filter(domainLike)
-				: domains;
+				: DEFAULT_DOMAINS.slice(); // key removed: fall back to defaults, same as a fresh start
 		const nextProxy = envProxyLocked
 			? proxyUri
 			: typeof next.proxy === "string" && next.proxy.trim()
@@ -254,6 +343,10 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	}
 	if (cfg.domains.length === 0) {
 		console.warn("[pi-httpproxy] whitelist is empty; every request will go direct");
+	} else if (cfg.usingDefaults) {
+		console.warn(
+			`[pi-httpproxy] using built-in default whitelist (${cfg.domains.length} rules); create ${CONFIG_PATH} to customize`
+		);
 	}
 
 	const undici = loadUndici();
