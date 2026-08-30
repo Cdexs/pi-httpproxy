@@ -26,8 +26,18 @@
 
 ## 安装
 
+从 npm 安装（发布后）：
+
 ```bash
 pi install @cdexs/pi-httpproxy
+```
+
+或直接从 GitHub 仓库安装：
+
+```bash
+pi install git:github.com/Cdexs/pi-httpproxy
+# 或
+pi install https://github.com/Cdexs/pi-httpproxy
 ```
 
 安装后，pi 会自动在 `~/.pi/proxy-domains.json` 创建默认配置文件（即示例内容：

@@ -31,8 +31,18 @@ Match hit → proxy; miss → direct connection.
 
 ## Install
 
+From npm (after publishing):
+
 ```bash
 pi install @cdexs/pi-httpproxy
+```
+
+or directly from GitHub:
+
+```bash
+pi install git:github.com/Cdexs/pi-httpproxy
+# or
+pi install https://github.com/Cdexs/pi-httpproxy
 ```
 
 After install, pi auto-creates the default config file at `~/.pi/proxy-domains.json`
