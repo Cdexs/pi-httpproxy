@@ -45,11 +45,6 @@
 	"peerDependencies": {
 		"undici": ">=6.0.0"
 	},
-	"peerDependenciesMeta": {
-		"undici": {
-			"optional": true
-		}
-	},
 	"devDependencies": {
 		"@types/node": "^22.0.0",
 		"typescript": "^5.9.3"

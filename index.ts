@@ -136,10 +136,11 @@ const DEFAULT_DOMAINS: string[] = [
 const CONFIG_PATH = join(AGENT_DIR, "proxy-domains.json");
 
 /**
- * Load undici from pi's bundled npm modules first (the agent runtime always
- * ships it), then fall back to normal `require("undici")` resolution from this
- * module's own install location (declared as an optional peerDependency, so it
- * resolves when npm hoisted it next to this package).
+ * Load undici from pi's bundled npm modules first (most installs already have
+ * it there — pi extensions share a hoisted dependency tree), then fall back to
+ * normal `require("undici")` resolution from this module's own install
+ * location (declared as a peerDependency: npm auto-installs it when the host
+ * environment has no copy yet, and reuses the existing one otherwise).
  */
 function loadUndici(): UndiciLike | null {
 	const candidates = [

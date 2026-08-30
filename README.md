@@ -71,22 +71,22 @@ Create `~/.pi/proxy-domains.json` (you can start from
 
 Rule syntax (case-insensitive):
 
-| Rule           | Matches                                    |
-| -------------- | ------------------------------------------ |
-| `example.com`  | exactly `example.com`                      |
-| `*.example.com`| any subdomain of `example.com` (not itself)|
-| `.example.com` | `example.com` plus all its subdomains      |
+| Rule            | Matches                                     |
+| --------------- | ------------------------------------------- |
+| `example.com`   | exactly `example.com`                       |
+| `*.example.com` | any subdomain of `example.com` (not itself) |
+| `.example.com`  | `example.com` plus all its subdomains       |
 
 Lines that don't look like domains (e.g. Chinese/English group labels) are
 silently ignored, so you can organize the list freely.
 
 ### Environment variables
 
-| Var              | Effect                                                        |
-| ---------------- | ------------------------------------------------------------- |
-| `PROXY_URL`      | Overrides the `proxy` field in the config file                |
-| `PROXY_DOMAINS`  | Comma-separated whitelist; overrides the `domains` array      |
-| `PI_PROXY_DEBUG` | Set to `1` to log every routing decision to the console       |
+| Var              | Effect                                                   |
+| ---------------- | -------------------------------------------------------- |
+| `PROXY_URL`      | Overrides the `proxy` field in the config file           |
+| `PROXY_DOMAINS`  | Comma-separated whitelist; overrides the `domains` array |
+| `PI_PROXY_DEBUG` | Set to `1` to log every routing decision to the console  |
 
 Fields locked by env vars are also excluded from hot reload.
 
@@ -119,8 +119,9 @@ isProxied("https://github.com/foo"); // → true if whitelisted
 ## Notes
 
 - undici is resolved from pi's bundled runtime modules first, then via normal
-  package resolution (optional peer dependency) — the package adds no runtime
-  dependencies.
+  package resolution — it is declared as a peerDependency, so npm installs it
+  automatically when no other pi extension has brought it in already, and the
+  package itself never ships a second runtime copy.
 - The extension only sets `PI_TELEGRAM_NETWORK_FAMILY` when it is not already
   set in your environment.
 

@@ -6,6 +6,7 @@ Initial release. Publishable generalization of the local `proxy-autoload` extens
 
 - Domain-whitelist global proxy: whitelisted domains via proxy, everything else direct
 - Triple routing coverage: global undici dispatcher, wrapped `globalThis.fetch`, pi-telegram network-family pin
+- undici resolved from pi's bundled modules first, auto-installed via peerDependency when the host has none
 - `~/.pi/proxy-domains.json` config; `PROXY_URL` / `PROXY_DOMAINS` env overrides
 - Built-in default whitelist (common services) for zero-config first run; explicit `"domains": []` disables it
 - `/httpproxy-reload` hot-reload command
