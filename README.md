@@ -35,18 +35,20 @@ Match hit → proxy; miss → direct connection.
 pi install @cdexs/pi-httpproxy
 ```
 
-After install, pi prints a first-run hint at startup pointing to the config
-file, e.g.:
+After install, pi auto-creates the default config file at `~/.pi/proxy-domains.json`
+(example content, whitelist preloaded, `proxy` left empty) and prints a first-run
+hint at startup pointing to it, e.g.:
 
 ```
-[pi-httpproxy] TIP: edit /Users/you/.pi/proxy-domains.json to set your "proxy"
-URL and the "domains" whitelist you want routed through it. (No file yet —
-the built-in default whitelist is already active; run /httpproxy-reload after
-creating the file to apply it.)
+[pi-httpproxy] created default config file at /Users/you/.pi/proxy-domains.json
+(whitelist preloaded; "proxy" is empty — edit it to point at your proxy, or see
+below for auto-detection)
+[pi-httpproxy] TIP: edit /Users/you/.pi/proxy-domains.json and set "proxy" to
+your HTTP proxy URL, then run /httpproxy-reload.
 ```
 
-So the fastest way to get fully customized routing: copy the example config,
-edit `proxy` and `domains`, then run `/httpproxy-reload`.
+So getting fully customized routing is just: edit `proxy` (and `domains` if
+needed) in that file, then run `/httpproxy-reload`.
 
 ## Configure
 
@@ -73,8 +75,9 @@ local proxy. A user-provided address (env / config) is trusted as-is.
 
 ### Full config
 
-Create `~/.pi/proxy-domains.json` (you can start from
-[`proxy-domains.example.json`](./proxy-domains.example.json)):
+Out of the box the config file already exists (auto-created on first run with
+the example content — `proxy` empty, default whitelist preloaded). Edit
+`~/.pi/proxy-domains.json` directly:
 
 ```jsonc
 {

@@ -30,17 +30,19 @@
 pi install @cdexs/pi-httpproxy
 ```
 
-安装后，pi 启动时会输出首次运行提示，指向配置文件的完整路径，例如：
+安装后，pi 会自动在 `~/.pi/proxy-domains.json` 创建默认配置文件（即示例内容：
+预置白名单、`proxy` 留空），并在启动时输出首次运行提示，例如：
 
 ```
-[pi-httpproxy] TIP: edit /Users/you/.pi/proxy-domains.json to set your "proxy"
-URL and the "domains" whitelist you want routed through it. (No file yet —
-the built-in default whitelist is already active; run /httpproxy-reload after
-creating the file to apply it.)
+[pi-httpproxy] created default config file at /Users/you/.pi/proxy-domains.json
+(whitelist preloaded; "proxy" is empty — edit it to point at your proxy, or see
+below for auto-detection)
+[pi-httpproxy] TIP: edit /Users/you/.pi/proxy-domains.json and set "proxy" to
+your HTTP proxy URL, then run /httpproxy-reload.
 ```
 
-想完全自定义分流：把示例配置复制过去，改好 `proxy` 和 `domains`，然后执行
-`/httpproxy-reload`。
+完全自定义分流只需要：直接编辑该文件里的 `proxy`（必要时改 `domains`），然后
+执行 `/httpproxy-reload`。
 
 ## 配置
 
@@ -66,8 +68,8 @@ creating the file to apply it.)
 
 ### 完整配置
 
-创建 `~/.pi/proxy-domains.json`（可以从
-[`proxy-domains.example.json`](./proxy-domains.example.json) 复制起步）：
+开箱时配置文件已经存在（首次运行自动创建，内容即示例：`proxy` 留空、白名单
+已预置）。直接编辑 `~/.pi/proxy-domains.json`：
 
 ```jsonc
 {

@@ -25,7 +25,7 @@
  * Debug: set PI_PROXY_DEBUG=1 before launch to print every routing decision.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
@@ -144,6 +144,40 @@ const DEFAULT_DOMAINS: string[] = [
  * machine without a local proxy.
  */
 const DEFAULT_PROXY = "http://127.0.0.1:7890";
+
+/**
+ * Seed the default config file on first run (the example content, shipped as
+ * the out-of-box defaults). Never overwrites an existing file. "proxy" is
+ * intentionally left empty: empty → the fallback chain (PROXY_URL → system
+ * proxy env → built-in default with reachability probe) applies, so a machine
+ * without a local proxy can never be broken by the seed.
+ */
+function seedConfigFile(): boolean {
+	if (existsSync(CONFIG_PATH)) return false;
+	try {
+		writeFileSync(
+			CONFIG_PATH,
+			JSON.stringify(
+				{
+					$comment:
+						"pi-httpproxy default config (auto-created on first run). " +
+						"Set \"proxy\" to your HTTP proxy URL — whitelisted \"domains\" go through it, everything else goes direct. " +
+						"Leave \"proxy\" empty to auto-detect (PROXY_URL env / system proxy env / built-in default 127.0.0.1:7890). " +
+						"Domain rules: exact, *.sub, or .base (includes itself); non-domain lines are ignored. " +
+						"Run /httpproxy-reload in pi after editing.",
+					proxy: "",
+					tapTelegramEnv: true,
+					domains: DEFAULT_DOMAINS.slice(),
+				},
+				null,
+				"\t"
+			) + "\n"
+		);
+		return true;
+	} catch {
+		return false; // read-only disk etc.: in-memory defaults still apply
+	}
+}
 
 const CONFIG_PATH = join(AGENT_DIR, "proxy-domains.json");
 
@@ -430,19 +464,25 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	installed = true;
 
 	const cfg = loadConfig();
-	const configFileExists = existsSync(CONFIG_PATH);
+	const seeded = seedConfigFile();
+	if (seeded) {
+		console.log(
+			`[pi-httpproxy] created default config file at ${CONFIG_PATH} ` +
+				`(whitelist preloaded; "proxy" is empty — edit it to point at your proxy, or see below for auto-detection)`
+		);
+	}
 	if (cfg.domains.length === 0) {
 		console.warn("[pi-httpproxy] whitelist is empty; every request will go direct");
 	} else if (cfg.usingDefaults) {
 		console.log(
-			`[pi-httpproxy] using built-in default whitelist (${cfg.domains.length} rules); create ${CONFIG_PATH} to customize`
+			`[pi-httpproxy] using built-in default whitelist (${cfg.domains.length} rules); edit ${CONFIG_PATH} to customize`
 		);
 	}
-	if (!configFileExists) {
-		// First-run hint: tell the user where to put their proxy URL + whitelist
+	if (cfg.proxySource !== "config") {
+		// No explicit "proxy" in the config file → tell the user where to put it
 		console.log(
-			`[pi-httpproxy] TIP: edit ${CONFIG_PATH} to set your "proxy" URL and the "domains" whitelist you want routed through it. ` +
-				`(No file yet — the built-in default whitelist is already active; run /httpproxy-reload after creating the file to apply it.)`
+			`[pi-httpproxy] TIP: edit ${CONFIG_PATH} and set "proxy" to your HTTP proxy URL, ` +
+				`then run /httpproxy-reload.`
 		);
 	}
 
@@ -468,16 +508,18 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	proxyAlive = !usingDefaultProxy;
 	proxyAgent = new ProxyAgent(proxyUri);
 	if (usingDefaultProxy) {
-		void probeProxy(proxyUri).then((ok) => {
+		const probed = proxyUri; // capture: reload may change proxyUri while probing
+		void probeProxy(probed).then((ok) => {
+			if (probed !== proxyUri) return; // address changed meanwhile; stale probe
 			if (ok) {
 				proxyAlive = true;
 				console.log(
-					`[pi-httpproxy] default proxy ${proxyUri} reachable — routing enabled`
+					`[pi-httpproxy] default proxy ${probed} reachable — routing enabled`
 				);
 			} else {
 				console.warn(
-					`[pi-httpproxy] default proxy ${proxyUri} unreachable — staying direct. ` +
-						`Set PROXY_URL or create ${CONFIG_PATH} with your proxy address to enable routing.`
+					`[pi-httpproxy] default proxy ${probed} unreachable — staying direct. ` +
+						`Set "proxy" in ${CONFIG_PATH} (or PROXY_URL) to enable routing, then run /httpproxy-reload.`
 				);
 			}
 		});
