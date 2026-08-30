@@ -32,6 +32,7 @@
 	"files": [
 		"index.ts",
 		"README.md",
+		"README.zh-CN.md",
 		"CHANGELOG.md",
 		"LICENSE",
 		"proxy-domains.example.json"

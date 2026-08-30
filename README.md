@@ -1,5 +1,7 @@
 # @cdexs/pi-httpproxy
 
+[English](./README.md) | [中文说明](./README.zh-CN.md)
+
 A [pi coding agent](https://github.com/badlogic/pi-mono) extension that
 auto-installs a **domain-whitelist global HTTP proxy** on startup: whitelisted
 domains are routed through your proxy, everything else goes direct.
@@ -32,6 +34,19 @@ Match hit → proxy; miss → direct connection.
 ```bash
 pi install @cdexs/pi-httpproxy
 ```
+
+After install, pi prints a first-run hint at startup pointing to the config
+file, e.g.:
+
+```
+[pi-httpproxy] TIP: edit /Users/you/.pi/proxy-domains.json to set your "proxy"
+URL and the "domains" whitelist you want routed through it. (No file yet —
+the built-in default whitelist is already active; run /httpproxy-reload after
+creating the file to apply it.)
+```
+
+So the fastest way to get fully customized routing: copy the example config,
+edit `proxy` and `domains`, then run `/httpproxy-reload`.
 
 ## Configure
 

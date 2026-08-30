@@ -13,6 +13,7 @@ Initial release. Publishable generalization of the local `proxy-autoload` extens
 - Config file is the primary source of truth: `PROXY_URL`/`PROXY_DOMAINS` only fill in fields it omits, so a coincidental env var can never hijack the file config
 - `/httpproxy-reload` after deleting the config file now restarts from defaults (fresh-start semantics) instead of erroring
 - `isProxyActive()` export to query whether proxy routing is live
+- First-run startup hint pointing to the full config path (only when no config file exists yet)
 - `/httpproxy-reload` hot-reload command
 - `tapTelegramEnv` config option to opt out of the pi-telegram env pin
 - Safe no-op when no proxy address is configured

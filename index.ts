@@ -430,11 +430,19 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	installed = true;
 
 	const cfg = loadConfig();
+	const configFileExists = existsSync(CONFIG_PATH);
 	if (cfg.domains.length === 0) {
 		console.warn("[pi-httpproxy] whitelist is empty; every request will go direct");
 	} else if (cfg.usingDefaults) {
 		console.log(
 			`[pi-httpproxy] using built-in default whitelist (${cfg.domains.length} rules); create ${CONFIG_PATH} to customize`
+		);
+	}
+	if (!configFileExists) {
+		// First-run hint: tell the user where to put their proxy URL + whitelist
+		console.log(
+			`[pi-httpproxy] TIP: edit ${CONFIG_PATH} to set your "proxy" URL and the "domains" whitelist you want routed through it. ` +
+				`(No file yet — the built-in default whitelist is already active; run /httpproxy-reload after creating the file to apply it.)`
 		);
 	}
 
