@@ -1,0 +1,60 @@
+{
+	"name": "@cdexs/pi-httpproxy",
+	"version": "0.1.0",
+	"description": "Pi coding agent extension that auto-installs a domain-whitelist global HTTP proxy: whitelisted domains go through your proxy, everything else stays direct. Zero-config safe (inert without a proxy address).",
+	"main": "index.ts",
+	"type": "module",
+	"keywords": [
+		"pi",
+		"pi-coding-agent",
+		"pi-package",
+		"proxy",
+		"undici",
+		"network",
+		"domain-whitelist",
+		"fetch"
+	],
+	"pi": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"author": "Cdexs",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Cdexs/pi-httpproxy.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Cdexs/pi-httpproxy/issues"
+	},
+	"homepage": "https://github.com/Cdexs/pi-httpproxy#readme",
+	"files": [
+		"index.ts",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE",
+		"proxy-domains.example.json"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"undici": ">=6.0.0"
+	},
+	"peerDependenciesMeta": {
+		"undici": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"typescript": "^5.9.3"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	}
+}

@@ -1,0 +1,36 @@
+{
+	"$comment": "pi-httpproxy config. Copy to ~/.pi/proxy-domains.json and edit. Fields: proxy = HTTP proxy URL for whitelisted domains; domains = whitelist rules (exact, .base, or *.base; plain-text group labels are ignored); tapTelegramEnv = set PI_TELEGRAM_NETWORK_FAMILY=auto for pi-telegram (default true). PROXY_URL / PROXY_DOMAINS env vars override the file.",
+	"proxy": "http://127.0.0.1:7890",
+	"tapTelegramEnv": true,
+	"domains": [
+		"-- Group labels (lines that don't look like domains) are ignored --",
+
+		"Google",
+		"google.com",
+		"*.google.com",
+		"googleapis.com",
+		"*.googleapis.com",
+		"gstatic.com",
+		"*.gstatic.com",
+
+		"GitHub",
+		"github.com",
+		"*.github.com",
+		"githubusercontent.com",
+		"*.githubusercontent.com",
+
+		"AI services",
+		"openai.com",
+		"*.openai.com",
+		"anthropic.com",
+		"*.anthropic.com",
+		"huggingface.co",
+		"*.huggingface.co",
+
+		"Other",
+		"npmjs.com",
+		"*.npmjs.com",
+		"telegram.org",
+		"*.telegram.org"
+	]
+}
