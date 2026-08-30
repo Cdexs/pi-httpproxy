@@ -43,9 +43,13 @@ Out of the box (no config file, no env vars) the extension uses:
   (Google, GitHub, Telegram, Brave Search, Hugging Face, OpenAI,
   Anthropic/Claude, npm registry and more) — same list as
   [`proxy-domains.example.json`](./proxy-domains.example.json)
-- **proxy fallback chain**: `PROXY_URL` → `proxy` in the config file →
+- **proxy fallback chain**: `proxy` in the config file → `PROXY_URL` env →
   `HTTPS_PROXY` / `HTTP_PROXY` system env → built-in default
   `http://127.0.0.1:7890` (Clash-family default port)
+
+**The config file is the primary source of truth**; `PROXY_URL` /
+`PROXY_DOMAINS` env vars only fill in fields the config file omits (so a
+coincidental env var can never hijack your file config).
 
 The built-in default address is verified with a quick reachability check: if
 nothing is listening there, the extension logs an actionable hint and stays
@@ -88,11 +92,12 @@ silently ignored, so you can organize the list freely.
 
 | Var              | Effect                                                   |
 | ---------------- | -------------------------------------------------------- |
-| `PROXY_URL`      | Overrides the `proxy` field in the config file (and the system-env and built-in default fallbacks) |
-| `PROXY_DOMAINS`  | Comma-separated whitelist; overrides the `domains` array |
+| `PROXY_URL`      | Fallback when the config file has no `proxy` field (file config always wins) |
+| `PROXY_DOMAINS`  | Comma-separated whitelist; only used when the config file has no `domains` key |
 | `PI_PROXY_DEBUG` | Set to `1` to log every routing decision to the console  |
 
-Fields locked by env vars are also excluded from hot reload.
+Fields the config file defines are never overridden by env vars, so env vars
+are also safe to keep set permanently.
 
 Note: to explicitly start with an empty whitelist (all direct), set a config
 file containing `"domains": []` — the built-in defaults only apply when the

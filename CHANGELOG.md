@@ -9,7 +9,9 @@ Initial release. Publishable generalization of the local `proxy-autoload` extens
 - undici resolved from pi's bundled modules first, auto-installed via peerDependency when the host has none
 - `~/.pi/proxy-domains.json` config; `PROXY_URL` / `PROXY_DOMAINS` env overrides
 - Built-in default whitelist (common services) for zero-config first run; explicit `"domains": []` disables it
-- Out-of-box proxy fallback chain: `PROXY_URL` → config → `HTTPS_PROXY`/`HTTP_PROXY` env → built-in default `127.0.0.1:7890`, with a reachability probe on the guessed default (falls back to direct with an actionable hint if unreachable)
+- Out-of-box proxy fallback chain: config file → `PROXY_URL` → `HTTPS_PROXY`/`HTTP_PROXY` env → built-in default `127.0.0.1:7890`, with a reachability probe on the guessed default (falls back to direct with an actionable hint if unreachable)
+- Config file is the primary source of truth: `PROXY_URL`/`PROXY_DOMAINS` only fill in fields it omits, so a coincidental env var can never hijack the file config
+- `/httpproxy-reload` after deleting the config file now restarts from defaults (fresh-start semantics) instead of erroring
 - `isProxyActive()` export to query whether proxy routing is live
 - `/httpproxy-reload` hot-reload command
 - `tapTelegramEnv` config option to opt out of the pi-telegram env pin

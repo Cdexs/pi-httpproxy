@@ -14,7 +14,8 @@
  *     fetch path and is always covered by the proxy above.
  *
  * Whitelist hit → proxied via `proxy` URL; miss → direct connection.
- * Config: ~/.pi/proxy-domains.json; PROXY_URL / PROXY_DOMAINS env vars override.
+ * Config: ~/.pi/proxy-domains.json is the primary source of truth;
+ * PROXY_URL / PROXY_DOMAINS env vars only fill in fields it omits.
  * If the config file does not define a "domains" array, a built-in default
  * whitelist (common blocked-region services) is used, so the extension works
  * out of the box: set PROXY_URL and go.
@@ -197,21 +198,24 @@ function loadConfig(): {
 		.map((s) => s.trim())
 		.filter(Boolean);
 
-	let cfgProxy = envProxy || "";
+	let cfgProxy = "";
 	let cfgDomains: string[] = [];
-	// Fallback marker: true when neither env nor config specifies a whitelist
-	let useDefaultDomains = !envDomains;
+	// Fallback marker: true when neither config nor env specifies a whitelist
+	let useDefaultDomains = true;
 	let cfgTapTelegramEnv = true;
 
+	// ── config file is the primary source of truth ──
 	if (existsSync(CONFIG_PATH)) {
 		try {
 			const raw = JSON.parse(
 				readFileSync(CONFIG_PATH, "utf-8")
 			) as HttpProxyOptions;
-			if (!cfgProxy && typeof raw.proxy === "string") cfgProxy = raw.proxy.trim();
-			if (!envDomains && Array.isArray(raw.domains)) {
+			if (typeof raw.proxy === "string" && raw.proxy.trim()) {
+				cfgProxy = raw.proxy.trim();
+			}
+			if (Array.isArray(raw.domains)) {
 				cfgDomains = raw.domains.filter(domainLike);
-				// config file explicitly defines a whitelist → don't fall back to defaults
+				// config file explicitly defines a whitelist → don't fall back to defaults (even when empty)
 				useDefaultDomains = false;
 			}
 			if (typeof raw.tapTelegramEnv === "boolean") {
@@ -223,18 +227,22 @@ function loadConfig(): {
 			);
 		}
 	}
-	if (envDomains) {
+
+	// ── env vars only fill in what the config file does not define ──
+	if (useDefaultDomains && envDomains) {
 		cfgDomains = envDomains;
+		useDefaultDomains = false;
 	} else if (useDefaultDomains) {
 		cfgDomains = DEFAULT_DOMAINS.slice();
 	}
 
-	// Proxy fallback chain: PROXY_URL → config file → system proxy env → built-in default
+	// ── proxy fallback chain: config file → PROXY_URL → system proxy env → built-in default ──
 	let proxySource: "env" | "config" | "system" | "default";
-	if (envProxy) {
-		proxySource = "env";
-	} else if (cfgProxy) {
+	if (cfgProxy) {
 		proxySource = "config";
+	} else if (envProxy) {
+		cfgProxy = envProxy;
+		proxySource = "env";
 	} else {
 		const sysProxy = (
 			process.env.HTTPS_PROXY ||
@@ -323,24 +331,31 @@ export function reloadProxyConfig(): ReloadResult {
 		return { ok: false, message: "✗ pi-httpproxy is not installed (routing not active)", changed: false };
 	}
 	try {
-		if (!existsSync(CONFIG_PATH)) {
-			return { ok: false, message: `✗ config file not found: ${CONFIG_PATH}`, changed: false };
-		}
-		const raw = readFileSync(CONFIG_PATH, "utf-8");
-		const next = JSON.parse(raw) as { proxy?: unknown; domains?: unknown };
-		const envDomainsLocked = !!process.env.PROXY_DOMAINS?.trim();
-		const envProxyLocked = !!process.env.PROXY_URL?.trim();
+		let raw: { proxy?: unknown; domains?: unknown } = {};
+		if (existsSync(CONFIG_PATH)) {
+			raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as {
+				proxy?: unknown;
+				domains?: unknown;
+			};
+		} // no file: treat as a fresh start (env / built-in defaults below)
+		// Same precedence as loadConfig: config file first, env fills only what it omits
+		const envDomains = process.env.PROXY_DOMAINS
+			?.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		const envProxy = process.env.PROXY_URL?.trim();
 
-		const nextDomains: string[] = envDomainsLocked
-			? domains.slice()
-			: Array.isArray(next.domains)
-				? (next.domains as unknown[]).filter(domainLike)
-				: DEFAULT_DOMAINS.slice(); // key removed: fall back to defaults, same as a fresh start
-		const nextProxy = envProxyLocked
-			? proxyUri
-			: typeof next.proxy === "string" && next.proxy.trim()
-				? next.proxy.trim()
-				: proxyUri;
+		const fileHasDomains = Array.isArray(raw.domains);
+		const nextDomains: string[] = fileHasDomains
+			? (raw.domains as unknown[]).filter(domainLike)
+			: envDomains && envDomains.length > 0
+				? envDomains
+				: DEFAULT_DOMAINS.slice(); // nothing specified: built-in defaults, same as a fresh start
+		const fileProxy =
+			typeof raw.proxy === "string" && raw.proxy.trim()
+				? raw.proxy.trim()
+				: "";
+		const nextProxy = fileProxy || envProxy || proxyUri;
 
 		const proxyChanged = nextProxy !== proxyUri;
 		if (proxyChanged) {
@@ -372,11 +387,14 @@ export function reloadProxyConfig(): ReloadResult {
 			nextDomains.some((d, i) => d !== domains[i]) ||
 			proxyChanged;
 		domains = nextDomains;
-		const note = envDomainsLocked
-			? " (PROXY_DOMAINS env override active, file whitelist ignored)"
-			: envProxyLocked
-				? " (PROXY_URL env override active, file proxy ignored)"
-				: "";
+		const note = !fileHasDomains
+			? " (no domains key in file — using " +
+				(envDomains?.length ? "PROXY_DOMAINS env" : "built-in defaults") + ")"
+			: fileProxy
+				? ""
+				: envProxy
+					? " (no proxy in file — using PROXY_URL env)"
+					: " (no proxy in file)";
 		return {
 			ok: true,
 			message: `✓ whitelist reloaded: proxy=${proxyUri}, domains=${domains.length} rule(s)${note}`,

@@ -1,5 +1,5 @@
 {
-	"$comment": "pi-httpproxy config. Copy to ~/.pi/proxy-domains.json and edit. Fields: proxy = HTTP proxy URL for whitelisted domains; domains = whitelist rules (exact, .base, or *.base; plain-text group labels are ignored) — when omitted, the built-in default whitelist (same as this example) is used; tapTelegramEnv = set PI_TELEGRAM_NETWORK_FAMILY=auto for pi-telegram (default true). PROXY_URL / PROXY_DOMAINS env vars override the file.",
+	"$comment": "pi-httpproxy config. Copy to ~/.pi/proxy-domains.json and edit. Fields: proxy = HTTP proxy URL for whitelisted domains; domains = whitelist rules (exact, .base, or *.base; plain-text group labels are ignored) — when omitted, the built-in default whitelist (same as this example) is used; tapTelegramEnv = set PI_TELEGRAM_NETWORK_FAMILY=auto for pi-telegram (default true). The config file always wins; PROXY_URL / PROXY_DOMAINS env vars only fill in fields it omits.",
 	"proxy": "http://127.0.0.1:7890",
 	"tapTelegramEnv": true,
 	"domains": [
