@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { connect as netConnect } from "node:net";
 
 interface UndiciLike {
 	Agent: unknown;
@@ -133,6 +134,16 @@ const DEFAULT_DOMAINS: string[] = [
 	"media.githubusercontent.com",
 ].filter(domainLike);
 
+/**
+ * Built-in fallback proxy address (Clash-family default port), used when the
+ * user has given no proxy anywhere (env / config file / system proxy env).
+ * Verified by a reachability check before it is trusted — if nothing is
+ * listening there, the extension stays fully direct and tells the user how to
+ * configure their real proxy, so out-of-box behavior can never break a
+ * machine without a local proxy.
+ */
+const DEFAULT_PROXY = "http://127.0.0.1:7890";
+
 const CONFIG_PATH = join(AGENT_DIR, "proxy-domains.json");
 
 /**
@@ -175,6 +186,7 @@ function domainLike(value: unknown): value is string {
 
 function loadConfig(): {
 	proxy: string;
+	proxySource: "env" | "config" | "system" | "default";
 	domains: string[];
 	tapTelegramEnv: boolean;
 	usingDefaults: boolean;
@@ -216,8 +228,33 @@ function loadConfig(): {
 	} else if (useDefaultDomains) {
 		cfgDomains = DEFAULT_DOMAINS.slice();
 	}
+
+	// Proxy fallback chain: PROXY_URL → config file → system proxy env → built-in default
+	let proxySource: "env" | "config" | "system" | "default";
+	if (envProxy) {
+		proxySource = "env";
+	} else if (cfgProxy) {
+		proxySource = "config";
+	} else {
+		const sysProxy = (
+			process.env.HTTPS_PROXY ||
+			process.env.https_proxy ||
+			process.env.HTTP_PROXY ||
+			process.env.http_proxy ||
+			""
+		).trim();
+		if (sysProxy) {
+			cfgProxy = sysProxy;
+			proxySource = "system";
+		} else {
+			cfgProxy = DEFAULT_PROXY;
+			proxySource = "default";
+		}
+	}
+
 	return {
 		proxy: cfgProxy,
+		proxySource,
 		domains: cfgDomains,
 		tapTelegramEnv: cfgTapTelegramEnv,
 		usingDefaults: useDefaultDomains && cfgDomains.length > 0,
@@ -238,10 +275,41 @@ function matchRule(host: string, rule: string): boolean {
 let installed = false;
 let domains: string[] = [];
 let proxyUri = "";
+/** Whether the proxy address is trusted; only a guessed default starts false */
+let proxyAlive = true;
+let usingDefaultProxy = false;
 let proxyAgent: {
 	dispatch: (opts: unknown, handler: unknown) => unknown;
 	close?: () => void;
 } | null = null;
+
+/**
+ * TCP reachability check for the proxy address (short timeout). Used only to
+ * gate a *guessed* default address so out-of-box machines without a local
+ * proxy degrade to direct connections instead of hanging.
+ */
+function probeProxy(uri: string, timeoutMs = 2500): Promise<boolean> {
+	try {
+		const u = new URL(uri);
+		const port = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
+		return new Promise<boolean>((resolve) => {
+			const sock = netConnect(
+				{ host: u.hostname, port: port },
+				() => {
+					sock.destroy();
+					resolve(true);
+				}
+			);
+			sock.setTimeout(timeoutMs, () => {
+				sock.destroy();
+				resolve(false);
+			});
+			sock.on("error", () => resolve(false));
+		});
+	} catch {
+		return Promise.resolve(false);
+	}
+}
 
 interface ReloadResult {
 	ok: boolean;
@@ -296,6 +364,9 @@ export function reloadProxyConfig(): ReloadResult {
 				/* releasing the old connection pool, harmless if it fails */
 			}
 		}
+		// Reloaded address comes from the user (file/env) — trust it again
+		usingDefaultProxy = false;
+		proxyAlive = true;
 		const changed =
 			nextDomains.length !== domains.length ||
 			nextDomains.some((d, i) => d !== domains[i]) ||
@@ -331,21 +402,20 @@ export function isProxied(url: string): boolean {
 	}
 }
 
+/** Whether whitelisted requests are currently routed through the proxy */
+export function isProxyActive(): boolean {
+	return proxyAlive;
+}
+
 export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	if (installed) return;
 	installed = true;
 
 	const cfg = loadConfig();
-	if (!cfg.proxy) {
-		console.warn(
-			`[pi-httpproxy] no proxy address (${CONFIG_PATH} has no "proxy" field, or PROXY_URL is unset); routing not enabled`
-		);
-		return;
-	}
 	if (cfg.domains.length === 0) {
 		console.warn("[pi-httpproxy] whitelist is empty; every request will go direct");
 	} else if (cfg.usingDefaults) {
-		console.warn(
+		console.log(
 			`[pi-httpproxy] using built-in default whitelist (${cfg.domains.length} rules); create ${CONFIG_PATH} to customize`
 		);
 	}
@@ -366,7 +436,26 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	};
 
 	proxyUri = cfg.proxy;
+	usingDefaultProxy = cfg.proxySource === "default";
+	// A guessed default address is untrusted until probed; user-provided
+	// addresses (env / config) are trusted as-is.
+	proxyAlive = !usingDefaultProxy;
 	proxyAgent = new ProxyAgent(proxyUri);
+	if (usingDefaultProxy) {
+		void probeProxy(proxyUri).then((ok) => {
+			if (ok) {
+				proxyAlive = true;
+				console.log(
+					`[pi-httpproxy] default proxy ${proxyUri} reachable — routing enabled`
+				);
+			} else {
+				console.warn(
+					`[pi-httpproxy] default proxy ${proxyUri} unreachable — staying direct. ` +
+						`Set PROXY_URL or create ${CONFIG_PATH} with your proxy address to enable routing.`
+				);
+			}
+		});
+	}
 	domains = cfg.domains;
 	const directAgent = new Agent();
 
@@ -381,7 +470,8 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 			} catch {
 				hostname = String(opts.origin ?? "");
 			}
-			const useProxy = domains.some((d) => matchRule(hostname, d));
+			const useProxy =
+				domains.some((d) => matchRule(hostname, d)) && proxyAlive;
 			if (dbg && useProxy) console.log(`[pi-httpproxy] → proxy ${String(opts.origin)}`);
 			const agent = useProxy ? proxyAgent! : directAgent;
 			return (agent as {
@@ -472,7 +562,7 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 
 	if (dbg) {
 		console.log(
-			`[pi-httpproxy] enabled: proxy=${proxyUri}, domains=${domains.length} rule(s), dispatchers=[${dn(proxyAgent)} <-> ${dn(directAgent)}], fetchWrapped=${globalThis.fetch !== origFetch}`
+			`[pi-httpproxy] enabled: proxy=${proxyUri} (source=${usingDefaultProxy ? "default, probing" : "user"}, alive=${proxyAlive}), domains=${domains.length} rule(s), dispatchers=[${dn(proxyAgent)} <-> ${dn(directAgent)}], fetchWrapped=${globalThis.fetch !== origFetch}`
 		);
 	}
 }

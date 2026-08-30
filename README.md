@@ -37,16 +37,20 @@ pi install @cdexs/pi-httpproxy
 
 ### Zero config
 
-If `~/.pi/proxy-domains.json` does not define a `domains` array, the extension
-uses a **built-in default whitelist** covering commonly-proxied services
-(Google, GitHub, Telegram, Brave Search, Hugging Face, OpenAI, Anthropic/
-Claude, npm registry, and more) — same list as
-[`proxy-domains.example.json`](./proxy-domains.example.json) below. Setting
-only `PROXY_URL` is enough:
+Out of the box (no config file, no env vars) the extension uses:
 
-```bash
-PROXY_URL=http://127.0.0.1:7890 pi
-```
+- **built-in default whitelist** covering commonly-proxied services
+  (Google, GitHub, Telegram, Brave Search, Hugging Face, OpenAI,
+  Anthropic/Claude, npm registry and more) — same list as
+  [`proxy-domains.example.json`](./proxy-domains.example.json)
+- **proxy fallback chain**: `PROXY_URL` → `proxy` in the config file →
+  `HTTPS_PROXY` / `HTTP_PROXY` system env → built-in default
+  `http://127.0.0.1:7890` (Clash-family default port)
+
+The built-in default address is verified with a quick reachability check: if
+nothing is listening there, the extension logs an actionable hint and stays
+fully **direct** — out-of-box behavior can never break a machine without a
+local proxy. A user-provided address (env / config) is trusted as-is.
 
 ### Full config
 
@@ -84,7 +88,7 @@ silently ignored, so you can organize the list freely.
 
 | Var              | Effect                                                   |
 | ---------------- | -------------------------------------------------------- |
-| `PROXY_URL`      | Overrides the `proxy` field in the config file           |
+| `PROXY_URL`      | Overrides the `proxy` field in the config file (and the system-env and built-in default fallbacks) |
 | `PROXY_DOMAINS`  | Comma-separated whitelist; overrides the `domains` array |
 | `PI_PROXY_DEBUG` | Set to `1` to log every routing decision to the console  |
 
