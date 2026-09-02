@@ -353,6 +353,42 @@ function probeProxy(uri: string, timeoutMs = 2500): Promise<boolean> {
 	}
 }
 
+const PROBE_CACHE_PATH = join(AGENT_DIR, "proxy-probe-cache.json");
+const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Cached probe result for a guessed default proxy: true/false, or undefined if absent/expired/stale. */
+function readProbeCache(uri: string): boolean | undefined {
+	try {
+		const c = JSON.parse(readFileSync(PROBE_CACHE_PATH, "utf-8")) as {
+			proxy?: string;
+			ok?: boolean;
+			ts?: number;
+		};
+		if (
+			c.proxy === uri &&
+			typeof c.ok === "boolean" &&
+			typeof c.ts === "number" &&
+			Date.now() - c.ts < PROBE_CACHE_TTL_MS
+		) {
+			return c.ok;
+		}
+	} catch {
+		/* no cache yet */
+	}
+	return undefined;
+}
+
+function writeProbeCache(uri: string, ok: boolean): void {
+	try {
+		writeFileSync(
+			PROBE_CACHE_PATH,
+			JSON.stringify({ proxy: uri, ok, ts: Date.now() })
+		);
+	} catch {
+		/* best effort */
+	}
+}
+
 interface ReloadResult {
 	ok: boolean;
 	message: string;
@@ -509,20 +545,31 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	proxyAgent = new ProxyAgent(proxyUri);
 	if (usingDefaultProxy) {
 		const probed = proxyUri; // capture: reload may change proxyUri while probing
-		void probeProxy(probed).then((ok) => {
-			if (probed !== proxyUri) return; // address changed meanwhile; stale probe
-			if (ok) {
-				proxyAlive = true;
-				console.log(
-					`[pi-httpproxy] default proxy ${probed} reachable — routing enabled`
-				);
-			} else {
-				console.warn(
-					`[pi-httpproxy] default proxy ${probed} unreachable — staying direct. ` +
-						`Set "proxy" in ${CONFIG_PATH} (or PROXY_URL) to enable routing, then run /httpproxy-reload.`
-				);
-			}
-		});
+		const cached = readProbeCache(probed);
+		if (cached !== undefined) {
+			// Fresh cached result: skip the 2.5s probe entirely (startup fast path)
+			proxyAlive = cached;
+			console.log(
+				`[pi-httpproxy] default proxy ${probed} — cached probe: ${cached ? "reachable" : "unreachable"} ` +
+					`(delete ${PROBE_CACHE_PATH} to re-probe)`
+			);
+		} else {
+			void probeProxy(probed).then((ok) => {
+				if (probed !== proxyUri) return; // address changed meanwhile; stale probe
+				writeProbeCache(probed, ok);
+				if (ok) {
+					proxyAlive = true;
+					console.log(
+						`[pi-httpproxy] default proxy ${probed} reachable — routing enabled`
+					);
+				} else {
+					console.warn(
+						`[pi-httpproxy] default proxy ${probed} unreachable — staying direct. ` +
+							`Set "proxy" in ${CONFIG_PATH} (or PROXY_URL) to enable routing, then run /httpproxy-reload.`
+					);
+				}
+			});
+		}
 	}
 	domains = cfg.domains;
 	const directAgent = new Agent();
