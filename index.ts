@@ -354,7 +354,6 @@ function probeProxy(uri: string, timeoutMs = 2500): Promise<boolean> {
 }
 
 const PROBE_CACHE_PATH = join(AGENT_DIR, "proxy-probe-cache.json");
-const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Cached probe result for a guessed default proxy: true/false, or undefined if absent/expired/stale. */
 function readProbeCache(uri: string): boolean | undefined {
@@ -364,12 +363,9 @@ function readProbeCache(uri: string): boolean | undefined {
 			ok?: boolean;
 			ts?: number;
 		};
-		if (
-			c.proxy === uri &&
-			typeof c.ok === "boolean" &&
-			typeof c.ts === "number" &&
-			Date.now() - c.ts < PROBE_CACHE_TTL_MS
-		) {
+		// 无 TTL：ok 状态一直有效；运行时连接失败会将其置为 false，
+		// /httpproxy-reload 或删除缓存文件可重新探测恢复
+		if (c.proxy === uri && typeof c.ok === "boolean") {
 			return c.ok;
 		}
 	} catch {
@@ -449,9 +445,11 @@ export function reloadProxyConfig(): ReloadResult {
 				/* releasing the old connection pool, harmless if it fails */
 			}
 		}
-		// Reloaded address comes from the user (file/env) — trust it again
+		// Reloaded address comes from the user (file/env) — trust it again,
+		// and reset the failure cache so next startup starts optimistic
 		usingDefaultProxy = false;
 		proxyAlive = true;
+		writeProbeCache(nextProxy, true);
 		const changed =
 			nextDomains.length !== domains.length ||
 			nextDomains.some((d, i) => d !== domains[i]) ||
@@ -548,34 +546,33 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 		const probed = proxyUri; // capture: reload may change proxyUri while probing
 		const srcLabel = cfg.proxySource;
 		const cached = readProbeCache(probed);
-		if (cached !== undefined) {
-			// Fresh cached result: skip the 2.5s probe entirely (startup fast path)
-			proxyAlive = cached;
+		if (cached === true) {
+			// Cache says reachable → enable directly, zero probe cost
+			proxyAlive = true;
 			console.log(
-				`[pi-httpproxy] proxy ${probed} (${srcLabel}) — cached probe: ${cached ? "reachable" : "unreachable"} ` +
-					`(delete ${PROBE_CACHE_PATH} to re-probe)`
+				`[pi-httpproxy] proxy ${probed} (${srcLabel}) — cached: OK, routing enabled`
 			);
-			if (!cached) {
-				console.warn(
-					`[pi-httpproxy] ⚠️ proxy unreachable — whitelisted domains fall back to DIRECT. ` +
-						`Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), then run /httpproxy-reload.`
-				);
-			}
+		} else if (cached === false) {
+			// Previous runtime failure: stay direct until /httpproxy-reload
+			proxyAlive = false;
+			console.warn(
+				`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) previously unreachable — staying DIRECT. ` +
+					`After fixing it, run /httpproxy-reload to re-enable (or delete ${PROBE_CACHE_PATH}).`
+			);
 		} else {
+			// First run: one probe to establish initial state
 			void probeProxy(probed).then((ok) => {
 				if (probed !== proxyUri) return; // address changed meanwhile; stale probe
 				writeProbeCache(probed, ok);
+				proxyAlive = ok;
 				if (ok) {
-					proxyAlive = true;
 					console.log(
 						`[pi-httpproxy] proxy ${probed} (${srcLabel}) reachable — routing enabled`
 					);
 				} else {
-					proxyAlive = false;
 					console.warn(
-						`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) unreachable — falling back to DIRECT ` +
-							`for whitelisted domains. Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), ` +
-							`then run /httpproxy-reload to re-enable.`
+						`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) unreachable — staying DIRECT. ` +
+							`Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), then run /httpproxy-reload to re-enable.`
 					);
 				}
 			});
@@ -642,10 +639,36 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 				if (url) {
 					const host = new URL(url).hostname;
 					if (domains.some((d) => matchRule(host, d))) {
+						const viaProxy = proxyAlive;
 						const next: RequestInit & { dispatcher?: unknown } = { ...(init ?? {}) };
-						next.dispatcher = next.dispatcher ?? proxyAgent;
+						next.dispatcher = viaProxy ? proxyAgent : directAgent;
 						init = next;
-						if (dbg) console.log(`[pi-httpproxy] fetch inject → ${host}`);
+						if (dbg) console.log(`[pi-httpproxy] fetch inject → ${host} (viaProxy=${viaProxy})`);
+						// 熔断器：经代理的白名单请求出现连接级失败 →
+						// 置缓存/状态为 false、回落直连并自动重试一次
+						const p = (origFetch as (...a: unknown[]) => Promise<Response>)(
+							input, init, ...rest
+						);
+						if (!viaProxy) return p;
+						return p.catch((err: unknown) => {
+							const code = (err as { cause?: { code?: string }; code?: string });
+							const ecode = code?.cause?.code || code?.code || "";
+							const connFail = ["ECONNREFUSED", "ENOTFOUND", "EHOSTUNREACH",
+								"ENETUNREACH", "ETIMEDOUT", "ECONNRESET",
+								"UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET"].includes(ecode);
+							if (!connFail || !proxyAlive) throw err;
+							proxyAlive = false;
+							writeProbeCache(proxyUri, false);
+							console.warn(
+								`[pi-httpproxy] ⚠️ 连接经代理 ${proxyUri} 失败(${ecode}) — 已熔断回落直连，` +
+									`本次请求自动重试。修复代理后运行 /httpproxy-reload 恢复。`
+							);
+							const retryInit: RequestInit & { dispatcher?: unknown } = { ...(init ?? {}) };
+							retryInit.dispatcher = directAgent;
+							return (origFetch as (...a: unknown[]) => Promise<Response>)(
+								input, retryInit, ...rest
+							);
+						});
 					}
 				}
 			} catch {
