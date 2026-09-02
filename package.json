@@ -1,6 +1,6 @@
 {
   "name": "@cdexs/pi-httpproxy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pi coding agent extension that auto-installs a domain-whitelist global HTTP proxy: whitelisted domains go through your proxy, everything else stays direct. Zero-config safe (inert without a proxy address).",
   "main": "index.ts",
   "type": "module",
