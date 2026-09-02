@@ -34,7 +34,7 @@ Match hit → proxy; miss → direct connection.
 From npm (after publishing):
 
 ```bash
-pi install @cdexs/pi-httpproxy
+pi install npm:@cdexs/pi-httpproxy
 ```
 
 or directly from GitHub:
