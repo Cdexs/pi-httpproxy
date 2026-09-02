@@ -355,6 +355,26 @@ function probeProxy(uri: string, timeoutMs = 2500): Promise<boolean> {
 
 const PROBE_CACHE_PATH = join(AGENT_DIR, "proxy-probe-cache.json");
 
+/** UI notify handle captured on session_start; console.warn still printed as fallback */
+let uiNotify: ((message: string, type?: "info" | "warning" | "error") => void) | null = null;
+let pendingNotices: Array<{ message: string; type: string }> = [];
+
+function notifyUser(message: string, type: "info" | "warning" | "error" = "warning"): void {
+	if (type === "warning") console.warn(message);
+	else console.log(message);
+	if (uiNotify) {
+		uiNotify(message, type);
+	} else {
+		if (pendingNotices.length < 5) pendingNotices.push({ message, type });
+	}
+}
+
+function flushPendingNotices(): void {
+	if (!uiNotify || pendingNotices.length === 0) return;
+	for (const n of pendingNotices) uiNotify(n.message, n.type as "info" | "warning" | "error");
+	pendingNotices = [];
+}
+
 /** Cached probe result for a guessed default proxy: true/false, or undefined if absent/expired/stale. */
 function readProbeCache(uri: string): boolean | undefined {
 	try {
@@ -496,6 +516,14 @@ export function isProxyActive(): boolean {
 export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 	if (installed) return;
 	installed = true;
+	// Capture the UI notify channel once a session context is available; flush
+	// any notices raised earlier (async probe results) through the real UI.
+	if (pi) {
+		pi.on("session_start", (_event, ctx) => {
+			uiNotify = (message, type) => ctx.ui.notify(message, type);
+			flushPendingNotices();
+		});
+	}
 
 	const cfg = loadConfig();
 	const seeded = seedConfigFile();
@@ -549,15 +577,17 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 		if (cached === true) {
 			// Cache says reachable → enable directly, zero probe cost
 			proxyAlive = true;
-			console.log(
-				`[pi-httpproxy] proxy ${probed} (${srcLabel}) — cached: OK, routing enabled`
+			notifyUser(
+				`[pi-httpproxy] proxy ${probed} (${srcLabel}) — cached: OK, routing enabled`,
+				"info"
 			);
 		} else if (cached === false) {
 			// Previous runtime failure: stay direct until /httpproxy-reload
 			proxyAlive = false;
-			console.warn(
+			notifyUser(
 				`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) previously unreachable — staying DIRECT. ` +
-					`After fixing it, run /httpproxy-reload to re-enable (or delete ${PROBE_CACHE_PATH}).`
+					`After fixing it, run /httpproxy-reload to re-enable (or delete ${PROBE_CACHE_PATH}).`,
+				"warning"
 			);
 		} else {
 			// First run: one probe to establish initial state
@@ -566,13 +596,15 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 				writeProbeCache(probed, ok);
 				proxyAlive = ok;
 				if (ok) {
-					console.log(
-						`[pi-httpproxy] proxy ${probed} (${srcLabel}) reachable — routing enabled`
+					notifyUser(
+						`[pi-httpproxy] proxy ${probed} (${srcLabel}) reachable — routing enabled`,
+						"info"
 					);
 				} else {
-					console.warn(
+					notifyUser(
 						`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) unreachable — staying DIRECT. ` +
-							`Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), then run /httpproxy-reload to re-enable.`
+							`Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), then run /httpproxy-reload to re-enable.`,
+						"warning"
 					);
 				}
 			});
@@ -659,9 +691,10 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 							if (!connFail || !proxyAlive) throw err;
 							proxyAlive = false;
 							writeProbeCache(proxyUri, false);
-							console.warn(
-								`[pi-httpproxy] ⚠️ 连接经代理 ${proxyUri} 失败(${ecode}) — 已熔断回落直连，` +
-									`本次请求自动重试。修复代理后运行 /httpproxy-reload 恢复。`
+							notifyUser(
+								`[pi-httpproxy] ⚠️ 连接经代理 ${proxyUri} 失败(${ecode}) — 已熔断回落直连，本次请求自动重试。` +
+									`修复代理后运行 /httpproxy-reload 恢复。`,
+								"error"
 							);
 							const retryInit: RequestInit & { dispatcher?: unknown } = { ...(init ?? {}) };
 							retryInit.dispatcher = directAgent;
