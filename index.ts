@@ -539,20 +539,28 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 
 	proxyUri = cfg.proxy;
 	usingDefaultProxy = cfg.proxySource === "default";
-	// A guessed default address is untrusted until probed; user-provided
-	// addresses (env / config) are trusted as-is.
-	proxyAlive = !usingDefaultProxy;
 	proxyAgent = new ProxyAgent(proxyUri);
-	if (usingDefaultProxy) {
+	// Any proxy address (guessed OR user-configured) is probed once per 24h
+	// (result cached by URI). Unreachable → warn loudly + fall back to direct:
+	// a dead proxy guarantees 100% failure on whitelisted domains, while direct
+	// may still work. /httpproxy-reload re-enables after fixing the address.
+	{
 		const probed = proxyUri; // capture: reload may change proxyUri while probing
+		const srcLabel = cfg.proxySource;
 		const cached = readProbeCache(probed);
 		if (cached !== undefined) {
 			// Fresh cached result: skip the 2.5s probe entirely (startup fast path)
 			proxyAlive = cached;
 			console.log(
-				`[pi-httpproxy] default proxy ${probed} — cached probe: ${cached ? "reachable" : "unreachable"} ` +
+				`[pi-httpproxy] proxy ${probed} (${srcLabel}) — cached probe: ${cached ? "reachable" : "unreachable"} ` +
 					`(delete ${PROBE_CACHE_PATH} to re-probe)`
 			);
+			if (!cached) {
+				console.warn(
+					`[pi-httpproxy] ⚠️ proxy unreachable — whitelisted domains fall back to DIRECT. ` +
+						`Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), then run /httpproxy-reload.`
+				);
+			}
 		} else {
 			void probeProxy(probed).then((ok) => {
 				if (probed !== proxyUri) return; // address changed meanwhile; stale probe
@@ -560,12 +568,14 @@ export default function installHttpProxyAutoload(pi?: ExtensionAPI) {
 				if (ok) {
 					proxyAlive = true;
 					console.log(
-						`[pi-httpproxy] default proxy ${probed} reachable — routing enabled`
+						`[pi-httpproxy] proxy ${probed} (${srcLabel}) reachable — routing enabled`
 					);
 				} else {
+					proxyAlive = false;
 					console.warn(
-						`[pi-httpproxy] default proxy ${probed} unreachable — staying direct. ` +
-							`Set "proxy" in ${CONFIG_PATH} (or PROXY_URL) to enable routing, then run /httpproxy-reload.`
+						`[pi-httpproxy] ⚠️ proxy ${probed} (${srcLabel}) unreachable — falling back to DIRECT ` +
+							`for whitelisted domains. Fix "proxy" in ${CONFIG_PATH} (or PROXY_URL), ` +
+							`then run /httpproxy-reload to re-enable.`
 					);
 				}
 			});
