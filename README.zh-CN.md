@@ -29,7 +29,7 @@
 从 npm 安装（发布后）：
 
 ```bash
-pi install @cdexs/pi-httpproxy
+pi install npm:@cdexs/pi-httpproxy
 ```
 
 或直接从 GitHub 仓库安装：
